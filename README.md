@@ -1,121 +1,128 @@
 # Aircraft AOV Image Classification
 
-这个项目使用 PyTorch 训练一个简单的 CNN，对飞机图片进行二分类。当前代码主要围绕 active learning 流程：先用已有标注图片训练模型，再从未标注缩略图中挑选模型最不确定的图片，打开标注窗口让用户标注，最后把新标注样本加入训练集继续训练。
+This project uses PyTorch to train a simple CNN for binary classification on aircraft images. The main workflow is active learning: train on the existing labeled images, select uncertain unlabeled thumbnails, label those images with a small Tkinter GUI, then add the newly labeled samples back into the training set.
 
 ## Project Structure
 
 ```text
 .
-├── train.py              # active learning 主训练流程
-├── test.py               # 加载 model.pth 并在测试集上评估
-├── model.py              # CNN 模型结构
-├── dataset.py            # 数据集和 DataLoader 工具
-├── aov.py                # Tkinter 图片标注窗口
-├── gettopindex.py        # 从 JetPhotos 抓取缩略图和 catalog 数据
-├── model.pth             # 已保存的模型权重
-├── train/
-│   ├── class_0/          # 已标注训练图片：类别 0
-│   └── class_1/          # 已标注训练图片：类别 1
-└── thumbnails/
-    ├── catalog.csv       # 未标注/半标注图片信息，包含 aov 标签列
-    └── *.jpg             # 待标注缩略图
+|-- train.py              # Main active learning training script
+|-- test.py               # Evaluates the saved model
+|-- model.py              # CNN model definition
+|-- dataset.py            # Dataset and DataLoader helpers
+|-- aov.py                # Tkinter labeling tool
+|-- gettopindex.py        # Downloads thumbnails and metadata from JetPhotos
+|-- model.pth             # Saved model weights
+|-- train/
+|   |-- class_0/          # Labeled training images for class 0
+|   `-- class_1/          # Labeled training images for class 1
+`-- thumbnails/
+    |-- catalog.csv       # Thumbnail metadata and labels
+    `-- *.jpg             # Unlabeled or partially labeled thumbnails
 ```
 
 ## Requirements
 
-建议使用 Python 3.10+。需要的主要依赖：
+Python 3.10+ is recommended.
 
-```bash
-pip install torch torchvision pandas numpy matplotlib pillow selenium requests beautifulsoup4
-```
-
-如果只训练和测试模型，通常需要：
+For training and testing:
 
 ```bash
 pip install torch torchvision pandas numpy matplotlib pillow
 ```
 
-`gettopindex.py` 使用 Selenium 和 Microsoft Edge WebDriver。如果不需要重新抓取图片，可以不用运行它。
+For downloading new images with `gettopindex.py`, also install:
+
+```bash
+pip install selenium requests beautifulsoup4
+```
+
+`gettopindex.py` uses Selenium with Microsoft Edge WebDriver. You do not need to run it if the thumbnail images already exist.
 
 ## Dataset Format
 
-训练集使用 `torchvision.datasets.ImageFolder`，所以目录必须保持这种格式：
+The labeled dataset uses `torchvision.datasets.ImageFolder`, so the training folder must follow this structure:
 
 ```text
 train/
-├── class_0/
-│   └── image1.jpg
-└── class_1/
-    └── image2.jpg
+|-- class_0/
+|   `-- image1.jpg
+`-- class_1/
+    `-- image2.jpg
 ```
 
-未标注图片放在 `thumbnails/` 目录下，同时需要 `thumbnails/catalog.csv`。代码会读取其中的 `id` 和 `aov` 列：
+Unlabeled images are stored in `thumbnails/`. The file `thumbnails/catalog.csv` is expected to contain at least these columns:
 
-- `aov = 0` 表示类别 0
-- `aov = 1` 表示类别 1
-- 空值表示还没有标注
+- `id`: image id, used to locate `<id>.jpg`
+- `aov`: label value
 
-## How to Train
+Label meanings:
 
-运行 active learning 训练：
+- `aov = 0`: class 0
+- `aov = 1`: class 1
+- empty value: not labeled yet
+
+## Training
+
+Run the active learning training script:
 
 ```bash
 python train.py
 ```
 
-训练流程大致是：
+The training script does the following:
 
-1. 从 `train/class_0` 和 `train/class_1` 加载已有标注图片。
-2. 初始化 `CNN` 模型。
-3. 训练若干 epoch。
-4. 对 `thumbnails/` 中的图片计算不确定性。
-5. 选择最不确定的 10 张图片。
-6. 打开 Tkinter 标注窗口，通过键盘输入 `0` 或 `1` 标注。
-7. 把新标注样本加入训练集，继续下一轮。
-8. 训练结束后保存为 `model.pth`。
+1. Loads labeled images from `train/class_0` and `train/class_1`.
+2. Initializes the CNN model.
+3. Trains the model for several epochs.
+4. Computes uncertainty scores for images in `thumbnails/`.
+5. Selects the 10 most uncertain images.
+6. Opens the labeling window so the selected images can be labeled.
+7. Adds the newly labeled samples to the training set.
+8. Saves the final weights to `model.pth`.
 
-注意：`train.py` 中目前写了本机绝对路径：
+Note: `train.py` currently contains local absolute paths:
 
 ```python
 data_dir_L = r'C:\Users\todds\Desktop\Final\train'
 data_dir_U = r'C:\Users\todds\Desktop\Final\thumbnails'
 ```
 
-如果项目移动到其他位置，需要改成新的路径，或者改成相对路径：
+If the project is moved, update these paths or replace them with relative paths:
 
 ```python
 data_dir_L = "./train"
 data_dir_U = "./thumbnails"
 ```
 
-## How to Test
+## Testing
 
-运行：
+Run:
 
 ```bash
 python test.py
 ```
 
-`test.py` 会加载 `model.pth`，然后在 `get_loaders()` 划分出的测试集上输出：
+`test.py` loads `model.pth` and evaluates it on the test split created by `get_loaders()`. It prints:
 
 - overall accuracy
 - class 0 accuracy
 - class 1 accuracy
-- 每个类别的样本数量和正确数量
+- sample counts and correct counts for each class
 
-注意：`test.py` 里也有一个绝对路径：
+Note: `test.py` also contains an absolute path:
 
 ```python
 data_dir_L = '/mnt/c/Users/todds/Desktop/env/Final/train'
 ```
 
-在 Windows PowerShell 中运行时，建议改成：
+For Windows PowerShell, change it to:
 
 ```python
 data_dir_L = r'C:\Users\todds\Desktop\Final\train'
 ```
 
-或者：
+Or use a relative path:
 
 ```python
 data_dir_L = "./train"
@@ -123,29 +130,30 @@ data_dir_L = "./train"
 
 ## Labeling Controls
 
-`aov.py` 中的标注窗口支持键盘操作：
+The labeling GUI in `aov.py` supports these keyboard controls:
 
-- `Right`: 下一张图片
-- `Left`: 上一张图片
-- `0`: 标为类别 0
-- `1`: 标为类别 1
+- `Right`: next image
+- `Left`: previous image
+- `0`: label as class 0
+- `1`: label as class 1
 
-关闭窗口时会询问是否保存更改。如果选择保存，会写回 `thumbnails/catalog.csv`。
+When the window is closed, it asks whether to save changes. If saved, the labels are written back to `thumbnails/catalog.csv`.
 
 ## Model
 
-模型定义在 `model.py`：
+The CNN is defined in `model.py`.
 
-- 输入：RGB 图片，经过 resize 后为 `120 x 80`
-- 两层卷积层
-- 两层最大池化
-- 一层全连接隐藏层
-- Dropout
-- 输出 2 个类别 logits
+Input images are resized to `120 x 80` and normalized. The model contains:
+
+- two convolution layers
+- two max pooling layers
+- one fully connected hidden layer
+- dropout
+- a final output layer with 2 logits
 
 ## Notes
 
-- `dataset.py` 中固定了随机种子，方便复现实验结果。
-- 当前 `get_loaders()` 每个类别只取约 20% 作为训练集，剩余作为测试集。
-- `thumbnails/catalog.csv` 当前包含多列重复的 `Unnamed` 索引列，可能是多次保存 CSV 时产生的；如果后续整理数据，可以清理这些列。
-- 上传 GitHub 时，建议不要上传 `__pycache__/`。如果数据集或模型文件太大，也可以把 `train/`、`thumbnails/`、`*.pth` 加入 `.gitignore`。
+- `dataset.py` sets random seeds for more reproducible results.
+- `get_loaders()` currently uses about 20% of each class as the training split and the remaining images as the test split.
+- `thumbnails/catalog.csv` currently includes repeated `Unnamed` index columns, likely created by saving the CSV multiple times. These columns can be cleaned later.
+- Before uploading to GitHub, avoid committing cache folders such as `__pycache__/`. Large model weights such as `*.pth` and archives such as `*.zip` are already ignored by `.gitignore`.
