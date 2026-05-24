@@ -2,6 +2,10 @@
 
 This project uses PyTorch to train a simple CNN for binary classification on aircraft images. The main workflow is active learning: train on the existing labeled images, select uncertain unlabeled thumbnails, label those images with a small Tkinter GUI, then add the newly labeled samples back into the training set.
 
+# Background
+
+Online image databases for plane spotting (airliners.net, jetphotos.com, planespotters.net) accepts public-taken aircrafts, and in cooperation with live-trackers (flightradar24, radarbox), publish aircraft photos on the radar tracker. The main purpose of such move is to give clear identification of each aircraft, and therefore side photos (taken angle in perpendicular to the flight direction) is preferred. In some photo angles, the image looks more artistic, but the aircraft in the image is not identifyable. One of such example is the head image. The project trains a model to tell which images are eligiable to be shown on the palne tracker.
+
 ## Project Structure
 
 ```text
